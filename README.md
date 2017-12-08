@@ -3,7 +3,7 @@
 ## Changes in this Fork
 
 This fork contains 2 main changes.
-- The XPUB keys are allowed to be BIP35 compatible.  This means that it allows level-2, non-hardend XPUBs.  The key generation paths and watching are now BIP35 compatible, however.
+- The XPUB keys are allowed to be BIP45 compatible.  This means that it allows level-2, non-hardend XPUBs.  The key generation paths and watching are now BIP45 compatible, however.
 - The lookahead is extended for use cases expecting a large number of unused wallets.
 
 ## General 
