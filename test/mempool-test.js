@@ -4,8 +4,7 @@
 'use strict';
 
 const assert = require('./util/assert');
-const encoding = require('../lib/utils/encoding');
-const random = require('../lib/crypto/random');
+const random = require('bcrypto/lib/random');
 const MempoolEntry = require('../lib/mempool/mempoolentry');
 const Mempool = require('../lib/mempool/mempool');
 const WorkerPool = require('../lib/workers/workerpool');
@@ -20,18 +19,21 @@ const Witness = require('../lib/script/witness');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 
+const ONE_HASH = Buffer.alloc(32, 0x00);
+ONE_HASH[0] = 0x01;
+
 const workers = new WorkerPool({
   enabled: true
 });
 
 const chain = new Chain({
-  db: 'memory',
+  memory: true,
   workers
 });
 
 const mempool = new Mempool({
   chain,
-  db: 'memory',
+  memory: true,
   workers
 });
 
@@ -64,6 +66,8 @@ describe('Mempool', function() {
   this.timeout(5000);
 
   it('should open mempool', async () => {
+    await workers.open();
+    await chain.open();
     await mempool.open();
     chain.state.flags |= Script.flags.VERIFY_WITNESS;
   });
@@ -77,7 +81,7 @@ describe('Mempool', function() {
 
     const script = Script.fromPubkey(key.publicKey);
 
-    t1.addCoin(dummyInput(script, encoding.ONE_HASH.toString('hex')));
+    t1.addCoin(dummyInput(script, ONE_HASH));
 
     const sig = t1.signature(0, script, 70000, key.privateKey, ALL, 0);
 
@@ -127,7 +131,7 @@ describe('Mempool', function() {
 
     // Fake signature
     const input = fake.inputs[0];
-    input.script.setData(0, encoding.ZERO_SIG);
+    input.script.setData(0, Buffer.alloc(73, 0x00));
     input.script.compile();
     // balance: 11000
 
@@ -169,8 +173,58 @@ describe('Mempool', function() {
 
     const txs = mempool.getHistory();
     assert(txs.some((tx) => {
-      return tx.hash('hex') === f1.hash('hex');
+      return tx.hash().equals(f1.hash());
     }));
+  });
+
+  it('should get spend coins and reflect in coinview', async () => {
+    const wallet = new MemWallet();
+    const script = Script.fromAddress(wallet.getAddress());
+    const dummyCoin = dummyInput(script, random.randomBytes(32));
+
+    // spend first output
+    const mtx1 = new MTX();
+    mtx1.addOutput(wallet.getAddress(), 50000);
+    mtx1.addCoin(dummyCoin);
+    wallet.sign(mtx1);
+
+    // spend second tx
+    const tx1 = mtx1.toTX();
+    const coin1 = Coin.fromTX(tx1, 0, -1);
+    const mtx2 = new MTX();
+
+    mtx2.addOutput(wallet.getAddress(), 10000);
+    mtx2.addOutput(wallet.getAddress(), 30000); // 10k fee..
+    mtx2.addCoin(coin1);
+
+    wallet.sign(mtx2);
+
+    const tx2 = mtx2.toTX();
+
+    await mempool.addTX(tx1);
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      assert(view.hasEntry(coin1));
+    }
+
+    await mempool.addTX(tx2);
+
+    // we should not have coins available in the mempool for these txs.
+    {
+      const view = await mempool.getCoinView(tx1);
+      const sview = await mempool.getSpentView(tx1);
+
+      assert(!view.hasEntry(dummyCoin));
+      assert(sview.hasEntry(dummyCoin));
+    }
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      const sview = await mempool.getSpentView(tx2);
+      assert(!view.hasEntry(coin1));
+      assert(sview.hasEntry(coin1));
+    }
   });
 
   it('should handle locktime', async () => {
@@ -181,7 +235,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkey(key.publicKey);
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
     tx.setLocktime(200);
@@ -203,7 +257,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkey(key.publicKey);
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
     tx.setLocktime(200);
@@ -234,7 +288,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromProgram(0, key.getKeyHash());
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
 
@@ -264,7 +318,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkey(key.publicKey);
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
 
@@ -293,7 +347,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromProgram(0, key.getKeyHash());
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
 
@@ -317,7 +371,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkey(key.publicKey);
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(prev, prevHash));
 
@@ -349,5 +403,7 @@ describe('Mempool', function() {
 
   it('should destroy mempool', async () => {
     await mempool.close();
+    await chain.close();
+    await workers.close();
   });
 });

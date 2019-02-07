@@ -5,7 +5,6 @@
 
 const assert = require('./util/assert');
 const consensus = require('../lib/protocol/consensus');
-const encoding = require('../lib/utils/encoding');
 const Coin = require('../lib/primitives/coin');
 const Script = require('../lib/script/script');
 const Chain = require('../lib/blockchain/chain');
@@ -19,6 +18,11 @@ const common = require('../lib/blockchain/common');
 const Opcode = require('../lib/script/opcode');
 const opcodes = Script.opcodes;
 
+const ZERO_KEY = Buffer.alloc(33, 0x00);
+
+const ONE_HASH = Buffer.alloc(32, 0x00);
+ONE_HASH[0] = 0x01;
+
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
@@ -26,7 +30,7 @@ const workers = new WorkerPool({
 });
 
 const chain = new Chain({
-  db: 'memory',
+  memory: true,
   network,
   workers
 });
@@ -107,7 +111,7 @@ chain.on('disconnect', (entry, block) => {
 });
 
 describe('Chain', function() {
-  this.timeout(45000);
+  this.timeout(process.browser ? 1200000 : 60000);
 
   it('should open chain and miner', async () => {
     await chain.open();
@@ -150,13 +154,13 @@ describe('Chain', function() {
       const blk1 = await job1.mineAsync();
       const blk2 = await job2.mineAsync();
 
-      const hash1 = blk1.hash('hex');
-      const hash2 = blk2.hash('hex');
+      const hash1 = blk1.hash();
+      const hash2 = blk2.hash();
 
       assert(await chain.add(blk1));
       assert(await chain.add(blk2));
 
-      assert.strictEqual(chain.tip.hash, hash1);
+      assert.bufferEqual(chain.tip.hash, hash1);
 
       tip1 = await chain.getEntry(hash1);
       tip2 = await chain.getEntry(hash2);
@@ -196,7 +200,7 @@ describe('Chain', function() {
     assert(await chain.add(block));
 
     assert(forked);
-    assert.strictEqual(chain.tip.hash, block.hash('hex'));
+    assert.bufferEqual(chain.tip.hash, block.hash());
     assert(chain.tip.chainwork.gt(tip1.chainwork));
   });
 
@@ -220,11 +224,11 @@ describe('Chain', function() {
 
     assert(await chain.add(block));
 
-    const hash = block.hash('hex');
+    const hash = block.hash();
     const entry = await chain.getEntry(hash);
 
     assert(entry);
-    assert.strictEqual(chain.tip.hash, entry.hash);
+    assert.bufferEqual(chain.tip.hash, entry.hash);
 
     const result = await chain.isMainChain(entry);
     assert(result);
@@ -314,7 +318,7 @@ describe('Chain', function() {
     const tx = block.txs[1];
     const output = Coin.fromTX(tx, 2, chain.height);
 
-    const coin = await chain.getCoin(tx.hash('hex'), 2);
+    const coin = await chain.getCoin(tx.hash(), 2);
 
     assert.bufferEqual(coin.toRaw(), output.toRaw());
   });
@@ -330,7 +334,14 @@ describe('Chain', function() {
     {
       const tips = await chain.db.getTips();
 
-      assert.notStrictEqual(tips.indexOf(chain.tip.hash), -1);
+      let index = -1;
+
+      for (let i = 0; i < tips.length; i++) {
+        if (tips[i].equals(chain.tip.hash))
+          index = i;
+      }
+
+      assert.notStrictEqual(index, -1);
       assert.strictEqual(tips.length, 2);
     }
 
@@ -339,7 +350,14 @@ describe('Chain', function() {
     {
       const tips = await chain.db.getTips();
 
-      assert.notStrictEqual(tips.indexOf(chain.tip.hash), -1);
+      let index = -1;
+
+      for (let i = 0; i < tips.length; i++) {
+        if (tips[i].equals(chain.tip.hash))
+          index = i;
+      }
+
+      assert.notStrictEqual(index, -1);
       assert.strictEqual(tips.length, 1);
     }
   });
@@ -555,7 +573,7 @@ describe('Chain', function() {
     const block = await cpu.mineBlock();
     const tx = block.txs[0];
     const input = tx.inputs[0];
-    input.witness.set(0, encoding.ONE_HASH);
+    input.witness.set(0, ONE_HASH);
     block.refresh(true);
     assert.strictEqual(await addBlock(block), 'bad-witness-merkle-match');
   });
@@ -574,7 +592,7 @@ describe('Chain', function() {
     output.script.compile();
 
     block.refresh(true);
-    block.merkleRoot = block.createMerkleRoot('hex');
+    block.merkleRoot = block.createMerkleRoot();
 
     assert.strictEqual(await addBlock(block, flags),
       'bad-witness-merkle-match');
@@ -591,7 +609,7 @@ describe('Chain', function() {
     tx.outputs.pop();
 
     block.refresh(true);
-    block.merkleRoot = block.createMerkleRoot('hex');
+    block.merkleRoot = block.createMerkleRoot();
 
     assert.strictEqual(await addBlock(block, flags), 'unexpected-witness');
   });
@@ -630,6 +648,9 @@ describe('Chain', function() {
 
     assert(await chain.add(block));
   });
+
+  if (process.browser)
+    return;
 
   it('should mine fail to connect too much weight', async () => {
     const start = chain.height - 2000;
@@ -788,7 +809,7 @@ describe('Chain', function() {
     redeem.pushInt(20);
 
     for (let i = 0; i < 20; i++)
-      redeem.pushData(encoding.ZERO_KEY);
+      redeem.pushData(ZERO_KEY);
 
     redeem.pushInt(20);
     redeem.pushOp(opcodes.OP_CHECKMULTISIG);
@@ -813,7 +834,7 @@ describe('Chain', function() {
       }
 
       block.refresh(true);
-      block.merkleRoot = block.createMerkleRoot('hex');
+      block.merkleRoot = block.createMerkleRoot();
 
       assert(await chain.add(block, flags));
     }
@@ -831,7 +852,7 @@ describe('Chain', function() {
     script.pushInt(20);
 
     for (let i = 0; i < 20; i++)
-      script.pushData(encoding.ZERO_KEY);
+      script.pushData(ZERO_KEY);
 
     script.pushInt(20);
     script.pushOp(opcodes.OP_CHECKMULTISIG);

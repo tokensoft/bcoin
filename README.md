@@ -16,9 +16,9 @@ details.
 **Bcoin** is an alternative implementation of the bitcoin protocol, written in
 node.js.
 
-Although still in a beta state, bcoin is well tested and aware of all known
-consensus rules. It is currently used in production as the consensus backend
-and wallet system for [purse.io][purse].
+Bcoin is well tested and aware of all known consensus rules. It is currently
+used in production as the consensus backend and wallet system for
+[purse.io][purse].
 
 ## Uses
 
@@ -29,7 +29,7 @@ and wallet system for [purse.io][purse].
 - Layer 2 Backend (lightning)
 - General Purpose Bitcoin Library
 
-Try it in the browser: http://bcoin.io/browser.html
+Try it in the browser: [https://bcoin.io/browser/](https://bcoin.io/browser/)
 
 ## Install
 
@@ -44,8 +44,8 @@ See the [Beginner's Guide][guide] for more in-depth installation instructions.
 
 ## Documentation
 
-- API Docs: http://bcoin.io/docs/
-- REST Docs: http://bcoin.io/api-docs/index.html
+- API Docs: https://bcoin.io/docs/
+- REST Docs: https://bcoin.io/api-docs/
 - Docs: [docs/](docs/README.md)
 
 ## Support
@@ -76,3 +76,8 @@ See LICENSE for more info.
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/bcoin
 [changelog]: https://github.com/bcoin-org/bcoin/blob/master/CHANGELOG.md
+
+[coverage-status-img]: https://codecov.io/gh/bcoin-org/bcoin/badge.svg?branch=master
+[coverage-status-url]: https://codecov.io/gh/bcoin-org/bcoin?branch=master
+[circleci-status-img]: https://circleci.com/gh/bcoin-org/bcoin/tree/master.svg?style=shield
+[circleci-status-url]: https://circleci.com/gh/bcoin-org/bcoin/tree/master
