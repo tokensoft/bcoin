@@ -5,7 +5,6 @@
 
 const assert = require('./util/assert');
 const consensus = require('../lib/protocol/consensus');
-const co = require('../lib/utils/co');
 const Coin = require('../lib/primitives/coin');
 const Script = require('../lib/script/script');
 const Opcode = require('../lib/script/opcode');
@@ -15,7 +14,7 @@ const TX = require('../lib/primitives/tx');
 const Address = require('../lib/primitives/address');
 
 const node = new FullNode({
-  db: 'memory',
+  memory: true,
   apiKey: 'foo',
   network: 'regtest',
   workers: true,
@@ -24,7 +23,7 @@ const node = new FullNode({
 
 const chain = node.chain;
 const miner = node.miner;
-const wdb = node.require('walletdb');
+const {wdb} = node.require('walletdb');
 
 let wallet = null;
 let tip1 = null;
@@ -44,8 +43,8 @@ async function mineBlock(tip, tx) {
 
   spend.addTX(tx, 0);
 
-  spend.addOutput(wallet.getReceive(), 25 * 1e8);
-  spend.addOutput(wallet.getChange(), 5 * 1e8);
+  spend.addOutput(await wallet.receiveAddress(), 25 * 1e8);
+  spend.addOutput(await wallet.changeAddress(), 5 * 1e8);
 
   spend.setLocktime(chain.height);
 
@@ -94,7 +93,7 @@ describe('Node', function() {
   it('should open walletdb', async () => {
     wallet = await wdb.create();
     miner.addresses.length = 0;
-    miner.addAddress(wallet.getReceive());
+    miner.addAddress(await wallet.receiveAddress());
   });
 
   it('should mine a block', async () => {
@@ -103,7 +102,8 @@ describe('Node', function() {
     await chain.add(block);
   });
 
-  it('should mine competing chains', async () => {
+  it('should mine competing chains', async function () {
+    this.timeout(20000);
     for (let i = 0; i < 10; i++) {
       const block1 = await mineBlock(tip1, cb1);
       cb1 = block1.txs[0];
@@ -125,7 +125,7 @@ describe('Node', function() {
 
       assert(!await chain.isMainChain(tip2));
 
-      await co.wait();
+      await new Promise(setImmediate);
     }
   });
 
@@ -136,7 +136,7 @@ describe('Node', function() {
   });
 
   it('should have correct balance', async () => {
-    await co.timeout(100);
+    await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
     assert.strictEqual(balance.unconfirmed, 550 * 1e8);
@@ -173,7 +173,7 @@ describe('Node', function() {
   });
 
   it('should have correct balance', async () => {
-    await co.timeout(100);
+    await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
     assert.strictEqual(balance.unconfirmed, 1100 * 1e8);
@@ -252,14 +252,14 @@ describe('Node', function() {
   });
 
   it('should get balance', async () => {
-    await co.timeout(100);
+    await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
     assert.strictEqual(balance.unconfirmed, 1250 * 1e8);
     assert.strictEqual(balance.confirmed, 750 * 1e8);
 
-    assert(wallet.account.receiveDepth >= 7);
-    assert(wallet.account.changeDepth >= 6);
+    assert((await wallet.receiveDepth()) >= 7);
+    assert((await wallet.changeDepth()) >= 6);
 
     assert.strictEqual(wdb.state.height, chain.height);
 
@@ -447,7 +447,7 @@ describe('Node', function() {
 
   it('should rescan for transactions', async () => {
     await wdb.rescan(0);
-    assert.strictEqual(wallet.txdb.state.confirmed, 1289250000000);
+    assert.strictEqual((await wallet.getBalance()).confirmed, 1289250000000);
   });
 
   it('should reset miner mempool', async () => {
@@ -498,7 +498,7 @@ describe('Node', function() {
         sigoplimit: 80000,
         sizelimit: 4000000,
         weightlimit: 4000000,
-        longpollid: node.chain.tip.rhash() + '0000000000',
+        longpollid: node.chain.tip.rhash() + '00000000',
         submitold: false,
         coinbaseaux: { flags: '6d696e65642062792062636f696e' },
         coinbasevalue: 1250000000,
@@ -551,17 +551,15 @@ describe('Node', function() {
   it('should validate an address', async () => {
     const addr = new Address();
 
-    addr.network = node.network;
-
     const json = await node.rpc.call({
       method: 'validateaddress',
-      params: [addr.toString()]
+      params: [addr.toString(node.network)]
     }, {});
 
     assert.deepStrictEqual(json.result, {
       isvalid: true,
-      address: addr.toString(),
-      scriptPubKey: Script.fromAddress(addr).toJSON(),
+      address: addr.toString(node.network),
+      scriptPubKey: Script.fromAddress(addr, node.network).toJSON(),
       ismine: false,
       iswatchonly: false
     });
@@ -572,7 +570,7 @@ describe('Node', function() {
       rate: 100000,
       outputs: [{
         value: 100000,
-        address: wallet.getAddress()
+        address: await wallet.receiveAddress()
       }]
     });
 
@@ -582,7 +580,7 @@ describe('Node', function() {
 
     const tx = mtx.toTX();
 
-    await wallet.db.addTX(tx);
+    await wdb.addTX(tx);
 
     const missing = await node.mempool.addTX(tx);
     assert(!missing);
@@ -597,7 +595,7 @@ describe('Node', function() {
       rate: 1000,
       outputs: [{
         value: 50000,
-        address: wallet.getAddress()
+        address: await wallet.receiveAddress()
       }]
     });
 
@@ -607,7 +605,7 @@ describe('Node', function() {
 
     const tx = mtx.toTX();
 
-    await wallet.db.addTX(tx);
+    await wdb.addTX(tx);
 
     const missing = await node.mempool.addTX(tx);
     assert(!missing);

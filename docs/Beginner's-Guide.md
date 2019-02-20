@@ -5,7 +5,7 @@ Bcoin is an _alternative_ implementation of the bitcoin protocol, written in nod
 ## Requirements
 
 - Linux, OSX, or Windows (\*) (\*\*)
-- node.js >=v5.0.0
+- node.js >=v7.6.0
 - npm >=v4.0.0
 - python2 (for node-gyp)
 - gcc/g++ (for leveldb and secp256k1)
@@ -38,6 +38,29 @@ $ git tag -v v1.0.0-alpha # verify signature
 $ git checkout v1.0.0-alpha
 $ npm install -g --production
 ```
+### Installing via Docker
+
+Check [bcoin-docker](https://github.com/bcoin-org/bcoin-docker)
+
+### Installing on Windows
+
+Install OpenSSL v1.0.2L 64-Bit:
+
+https://slproweb.com/download/Win64OpenSSL-1_0_2L.exe
+
+As Administrator, open `cmd.exe` and run:
+
+```console
+C:\Users\bcoin\bcoin>npm install --global --production windows-build-tool
+```
+
+to install `VCBuild.exe` and `Python 2.7.x` both required by `node-gyp`
+for building native modules.
+
+Then continue [Installing via Git](#installing-via-git)
+
+Note that you need a shell that supports bash scripts, like Git Bash to launch
+bcoin.
 
 ### Troubleshooting
 
